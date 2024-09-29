@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h1>Empirical Probability Density Estimation</h1>
+<h2>Input Data</h2>
+<input type="text" id="numbers" name="numbers" required minlength="0" maxlength="65536" size="64" />
+<h2>Empirical Distribution Function</h2>
+<canvas id="edf" width="512" height="384" style="border:1px solid grey"></canvas>
+<h2>First Order Estimate of the Empirical Probability Density</h2>
+<canvas id="pd1" width="512" height="384" style="border:1px solid grey"></canvas>
+<h2>Corresponding Distribution Function</h2>
+<canvas id="df1" width="512" height="384" style="border:1px solid grey"></canvas>
+<h2>Second Order Estimate of the Empirical Probability Density</h2>
+<canvas id="pd2" width="512" height="384" style="border:1px solid grey"></canvas>
+<h2>Corresponding Distribution Function</h2>
+<canvas id="df2" width="512" height="384" style="border:1px solid grey"></canvas>
+<h2>Higher Order Estimate of the Empirical Probability Density</h2>
+<canvas id="pd3" width="512" height="384" style="border:1px solid grey"></canvas>
+<script>
+function log_binom(n, k) {
+  var logresult = 0;
+  for (var i = 1; i <= k; i++) {
+    logresult += Math.log(n + 1 - i) - Math.log(i);
+  }
+  return logresult;
+}
+function binomial(n, k) {
+  var logresult = 0;
+  for (var i = 1; i <= k; i++) {
+    logresult += Math.log(n + 1 - i) - Math.log(i);
+  }
+  return Math.exp(log_binom(n,k));
+}
+function binom(x,n,p){
+  return Math.exp(
+    log_binom(n,x)
+   +x*Math.log(p)
+   +(n-x)*Math.log(1.0-p)
+  );
+}
+function binom1(x,n,p,p1){ // slightly increased precision
+  return Math.exp(
+    log_binom(n,x)
+   +x*Math.log(p)
+   +(n-x)*Math.log(p1) // p1=1-p
+  );
+}
+function gaussian_pdf(x,m,v) {
+  return Math.exp(-0.5*(x-m)**2/Math.abs(v))/Math.sqrt(2*Math.PI*Math.abs(v));
+  return Math.exp(-0.5*((x-m)**2/Math.abs(v)+Math.log(2*Math.PI*Math.abs(v))));
+}
+function estimate_pdf(data,min,max,M) {
+  pdf = [];
+  for (i=0;i<M;++i) pdf.push(0.0);
+  N = data.length;
+  for (j=0;j<data.length;++j) {
+    m = data[j];
+    sumwdd = 0.0;
+    sumw = 0.0;
+    sumww = 0.0;
+    for (i=0;i<data.length;++i) {
+      x = data[i];
+      d = x-m;
+      w = binom(i,N-1,(j+1)/(N+1),(N-j)/(N+1));
+      sumwdd += w*d*d;
+      sumw += w;
+      sumww += w*w;
+    }
+    Neff = sumw**2/sumww;
+    //v = (Neff)*sumwdd/((Neff-1)*sumw);
+    v = 0.5*sumwdd/sumw;
+    for (i=0;i<M;++i) {
+      x = min+((i+0.5)*(max-min)/M);
+      pdf[i]+=gaussian_pdf(x,m,v);
+    }
+  }
+  sum = 0.0;
+  pdf_sorted = [...pdf];
+  pdf_sorted.sort((a,b)=>a-b);
+  for (i=0;i<pdf_sorted.length;++i) sum+=pdf_sorted[i];
+  c = sum>0.0?1.0/sum:1.0;
+  for (i=0;i<pdf.length;++i) pdf[i]*=c;
+  return pdf;
+}
+function estimate_pdf_(data,edf,min,max) {
+  //console.log("estimate_pdf");
+  N = data.length;
+  M = edf.length;
+  pdf = [];
+  for (j=0;j<M;++j) {
+    m = min+((j+0.5)*(max-min)/M);
+    sumd2 = 0.0;
+    sumw = 0.0;
+    sumw2 = 0.0;
+    sumd = 0.0;
+    sumd3 = 0.0;
+    q = edf[j];
+    for (i=0;i<N;++i) {
+      x = 1.0*data[i];
+      d = x-m;
+      w = binom(i,N-1,q);
+      //w = binom(N-1,i)*(q**(i-1))*((1-q)**(N-i-2)); strange
+      sumd2 += w*d*d;
+      sumd += w*d;
+      sumd3 += w*d*d*d;
+      sumw += w;
+      sumw2+= w*w;
+    }
+    Neff = sumw**2/sumw2;
+    //pdf.push(Math.sqrt(sumw/sum));
+    //if (sum>0) pdf.push(Math.sqrt(1.0/(sum+Math.abs(sumd)**(2.0/3.0))));
+    //if (sumd2>0) pdf.push(sumw2/(sumd2+Math.abs(sumd3)**(2.0/3.0)));
+    //if (sumd2>0) pdf.push(Math.sqrt((Neff-1)**2*sumw2/(sumd2+4*Math.abs(sumd3)**(2.0/3.0))));
+    //if (sumd2>0) pdf.push(Math.sqrt(Math.sqrt(q*(1-q))*sumw2/sumd2));
+    if (sumd2>0) pdf.push(Math.sqrt(q*(1-q)*sumw2/sumd2));
+    else pdf.push(0);
+  }
+  initial_value = 0.0;
+  sum = 0.0;
+  pdf_sorted = [...pdf];
+  pdf_sorted.sort((a,b)=>a-b);
+  for (i=0;i<pdf_sorted.length;++i) sum+=pdf_sorted[i];
+  c = sum>0.0?1.0/sum:1.0;
+  for (i=0;i<pdf.length;++i) pdf[i]*=c;
+  return pdf;
+}
+const edf = document.getElementById("edf");
+const edf_ctx = edf.getContext("2d");
+const pd1 = document.getElementById("pd1");
+const pd1_ctx = pd1.getContext("2d");
+const df1 = document.getElementById("df1");
+const df1_ctx = df1.getContext("2d");
+const pd2 = document.getElementById("pd2");
+const pd2_ctx = pd2.getContext("2d");
+const df2 = document.getElementById("df2");
+const df2_ctx = df2.getContext("2d");
+const pd3 = document.getElementById("pd3");
+const pd3_ctx = pd3.getContext("2d");
+document.getElementById("numbers").addEventListener("input",update);
+function update(e) {
+  data = document.getElementById("numbers").value.match(/\S+/g).map(x=>parseFloat(x)).sort((a,b)=>a-b);
+  min = 0.0;
+  max = 1.0;
+  if (data.length) {
+    min = data[0];
+    max = data[data.length-1];
+  }
+//  console.log(min,max);
+  if (min===max) {
+    min-=1.0;
+    max+=1.0;
+  } else {
+    [ min,max ] = [min-4.0*(max-min)/data.length,max+4.0*(max-min)/data.length];
+  }
+//  console.log(min,max);
+  edf_ctx.clearRect(0,0,edf.width,edf.height);
+  edf_ctx.beginPath();
+  edf_ctx.moveTo(0,edf.height);
+  data.forEach((x,i,a)=>{
+    edf_ctx.lineTo(edf.width*(x-min)/(max-min),(a.length-i  )*edf.height/a.length);
+    edf_ctx.lineTo(edf.width*(x-min)/(max-min),(a.length-i-1)*edf.height/a.length);
+  });
+  edf_ctx.lineTo(edf.width,0);
+  edf_ctx.stroke();
+  edf_samples = [];
+  {
+    j = 0;
+    d = 0.0;
+    a = 0;
+    b = (data[j]-min)/(max-min)*edf.width;
+    for (i=0;i<edf.width;++i) {
+      x = min+i*(max-min)/edf.width;
+      if (x>data[j]) {
+        if (j<data.length) {
+          a=b;
+          b=(data[++j]-min)/(max-min)*edf.width;
+        } else {
+          a=b;
+          b=max;
+        }
+      }
+      d+=1.0/((b-a)*data.length);
+      edf_samples.push(d);
+    }
+  }
+  pd1_samples = estimate_pdf(data,min,max,pd1.width);
+  df1_samples = []
+  sum = 0.0;
+  max_p = 0;
+  for (i=0;i<pd1_samples.length;++i) {
+    if (pd1_samples[i]>max_p) max_p = pd1_samples[i];
+    df1_samples.push(sum+=pd1_samples[i]);
+  }
+  if (sum>0) for (i=0;i<df1_samples.length;++i) df1_samples[i]/=sum;
+  pd1_ctx.clearRect(0,0,pd1.width,pd1.height);
+  pd1_ctx.beginPath();
+  pd1_ctx.moveTo(0,pd1.height);
+  pd1_samples.forEach((p,i,a)=>pd1_ctx.lineTo(i,pd1.height*(1-p/max_p)));
+  pd1_ctx.lineTo(pd1.width,pd1.height);
+  pd1_ctx.stroke();
+  
+  df1_ctx.clearRect(0,0,df1.width,df1.height);
+  df1_ctx.beginPath();
+  df1_ctx.moveTo(0,df1.height);
+  df1_samples.forEach((q,i,a)=>df1_ctx.lineTo(i,df1.height*(1-q)));
+  df1_ctx.lineTo(df1.width,0);
+  df1_ctx.stroke();
+ /* 
+  //for (i=0;i<df1_samples.length;++i) {
+  //  df1[i]*=1.0-2.0/(data.length+4.0);
+  //  df1[i]+=2.0/(data.length+4.0);
+  //}
+  pd2_samples = estimate_pdf(data,df1_samples,min,max);
+  df2_samples = []
+  sum = 0.0;
+  max_p = 0;
+  for (i=0;i<pd2_samples.length;++i) {
+    if (pd2_samples[i]>max_p) max_p = pd2_samples[i];
+    sum+=pd2_samples[i];
+    df2_samples.push(sum);
+  }
+  pd2_ctx.clearRect(0,0,pd2.width,pd2.height);
+  pd2_ctx.beginPath();
+  pd2_ctx.moveTo(0,pd2.height);
+  pd2_samples.forEach((p,i,a)=>pd2_ctx.lineTo(i,pd2.height*(1-p/max_p)));
+  pd2_ctx.lineTo(pd2.width,pd2.height);
+  pd2_ctx.stroke();
+  
+  df2_ctx.clearRect(0,0,df2.width,df2.height);
+  df2_ctx.beginPath();
+  df2_ctx.moveTo(0,df2.height);
+  df2_samples.forEach((q,i,a)=>df2_ctx.lineTo(i,df2.height*(1-q)));
+  df2_ctx.lineTo(df2.width,0);
+  df2_ctx.stroke();
+  
+  df3_samples=df2_samples;
+  for (j=0;j<2;++j) {
+    pd3_samples = estimate_pdf(data,df3_samples,min,max);
+    sum = 0.0;
+    max_p = 0;
+    for (i=0;i<pd3_samples.length;++i) {
+      if (pd3_samples[i]>max_p) max_p = pd3_samples[i];
+      sum+=pd3_samples[i];
+      df3_samples[i]=sum;
+    }
+  }
+  pd3_ctx.clearRect(0,0,pd3.width,pd3.height);
+  pd3_ctx.beginPath();
+  pd3_ctx.moveTo(0,pd3.height);
+  pd3_samples.forEach((p,i,a)=>pd3_ctx.lineTo(i,pd3.height*(1-p/max_p)));
+  pd3_ctx.lineTo(pd3.width,pd3.height);
+  pd3_ctx.stroke();
+*/
+}
+</script>
+</body>
+</html>
