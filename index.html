@@ -82,14 +82,14 @@ function estimate_pdf(data,min,max,M) {
     sumww = sumww_left + sumww_center + sumww_right;
     sumwdd = sumwdd_left + sumwdd_center + sumwdd_right;
     Neff = sumw**2/sumww;
-    v = (Neff)*sumwdd/((Neff-1)*sumw);
-    //v = sumwdd/sumw;
+    //v = Neff*sumwdd/((Neff-1)*sumw);
+    v = sumwdd/sumw;
     imin = Math.floor((data[j]-min)*(M-0.5)/(max-min)-5*Math.sqrt(v));
     imin = imin<0?0:imin;
     imax = Math.ceil((data[j]-min)*(M-0.5)/(max-min)+5*Math.sqrt(v));
     imax = imax>M-1?M-1:imax;
-    console.log(imin,imax);
-    for (i=imin;i<=imax;++i) {
+    //for (i=imin;i<=imax;++i) {
+    for (i=0;i<=M;++i) {
       x = min+((i+0.5)*(max-min)/M);
       pdf[i]+=gaussian_pdf(x,m,v);
     }
