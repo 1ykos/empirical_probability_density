@@ -49,21 +49,47 @@ function estimate_pdf(data,min,max,M) {
   N = data.length;
   for (j=0;j<data.length;++j) {
     m = data[j];
-    sumwdd = 0.0;
-    sumw = 0.0;
-    sumww = 0.0;
-    for (i=0;i<data.length;++i) {
+    x = m;
+    w = binom(j,N-1,(j+1)/(N+1),(N-j)/(N+1));
+    sumwdd_center = 0.0;
+    sumw_center = w;
+    sumww_center = w*w;
+    sumwdd_left = 0.0;
+    sumw_left = 0.0;
+    sumww_left = 0.0;
+    for (i=j-1;i>0;--i) {
+      w = binom(i,N-1,(j+1)/(N+1),(N-j)/(N+1));
+      sumw_left += w;
+      sumww_left += w*w;
       x = data[i];
       d = x-m;
-      w = binom(i,N-1,(j+1)/(N+1),(N-j)/(N+1));
-      sumwdd += w*d*d;
-      sumw += w;
-      sumww += w*w;
+      sumwdd_left += w*d*d;
+      if (w*256<sumw_left/(j-i)) break; 
     }
+    sumwdd_right = 0.0;
+    sumw_right = 0.0;
+    sumww_right = 0.0;
+    for (i=j+1;i<data.length;++i) {
+      w = binom(i,N-1,(j+1)/(N+1),(N-j)/(N+1));
+      sumw_right += w;
+      sumww_right += w*w;
+      x = data[i];
+      d = x-m;
+      sumwdd_right += w*d*d;
+      if (w*256<sumw_right/(i-j)) break; 
+    }
+    sumw = sumw_left + sumw_center + sumw_right;
+    sumww = sumww_left + sumww_center + sumww_right;
+    sumwdd = sumwdd_left + sumwdd_center + sumwdd_right;
     Neff = sumw**2/sumww;
-    //v = (Neff)*sumwdd/((Neff-1)*sumw);
-    v = 0.5*sumwdd/sumw;
-    for (i=0;i<M;++i) {
+    v = (Neff)*sumwdd/((Neff-1)*sumw);
+    //v = sumwdd/sumw;
+    imin = Math.floor((data[j]-min)*(M-0.5)/(max-min)-5*Math.sqrt(v));
+    imin = imin<0?0:imin;
+    imax = Math.ceil((data[j]-min)*(M-0.5)/(max-min)+5*Math.sqrt(v));
+    imax = imax>M-1?M-1:imax;
+    console.log(imin,imax);
+    for (i=imin;i<=imax;++i) {
       x = min+((i+0.5)*(max-min)/M);
       pdf[i]+=gaussian_pdf(x,m,v);
     }
